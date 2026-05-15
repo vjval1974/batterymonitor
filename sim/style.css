@@ -1,0 +1,215 @@
+:root {
+    color-scheme: dark;
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-edge: #30363d;
+    --ink: #e6edf3;
+    --ink-dim: #9aa4ad;
+    --accent: #58a6ff;
+    --warn: #ffe066;
+    --bad: #ff7373;
+    --good: #7be07b;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                  Helvetica, Arial, sans-serif;
+}
+
+header {
+    padding: 24px 32px 8px;
+    border-bottom: 1px solid var(--panel-edge);
+}
+header h1 {
+    margin: 0 0 4px;
+    font-size: 20px;
+    font-weight: 600;
+}
+.sub {
+    margin: 0;
+    color: var(--ink-dim);
+    font-size: 13px;
+    max-width: 64ch;
+}
+
+main {
+    display: grid;
+    grid-template-columns: minmax(360px, 1fr) minmax(280px, 1fr);
+    grid-template-areas:
+        "device controls"
+        "log    log";
+    gap: 24px;
+    padding: 24px 32px;
+}
+.device   { grid-area: device; }
+.controls { grid-area: controls; }
+.logwrap  { grid-area: log; }
+
+section {
+    background: var(--panel);
+    border: 1px solid var(--panel-edge);
+    border-radius: 10px;
+    padding: 20px;
+}
+section h2 {
+    margin: 0 0 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* ------- Device shield -------------------------------------------------- */
+
+.shield {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+#lcd {
+    background: #f4f4f4;
+    color: #0d0d0d;
+    border: 4px solid #2a2a2a;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-family: "JetBrains Mono", "Menlo", "Courier New", monospace;
+    font-size: 22px;
+    line-height: 1.1;
+    letter-spacing: 0.02em;
+    box-shadow: 0 0 0 2px #444 inset;
+    transition: background-color 0.3s ease;
+}
+#lcd pre {
+    margin: 0;
+    white-space: pre;
+}
+
+.screen-name {
+    margin: 0;
+    color: var(--ink-dim);
+    font-size: 12px;
+    font-family: monospace;
+}
+
+.buttons {
+    display: grid;
+    grid-template-columns: repeat(3, 56px);
+    gap: 6px;
+    margin-top: 4px;
+}
+.buttons button {
+    width: 56px;
+    height: 44px;
+    border-radius: 8px;
+    border: 1px solid var(--panel-edge);
+    background: #21262d;
+    color: var(--ink);
+    font-size: 18px;
+    cursor: pointer;
+    transition: background-color 0.1s;
+}
+.buttons button:hover { background: #2d333b; }
+.buttons button:active { background: var(--accent); color: #0d1117; }
+
+.hint {
+    margin: 0;
+    font-size: 11px;
+    color: var(--ink-dim);
+    text-align: center;
+    max-width: 28ch;
+}
+
+/* ------- Gauges --------------------------------------------------------- */
+
+.gauges {
+    margin-top: 20px;
+}
+.gauges dl {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px 16px;
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+}
+.gauges dt {
+    color: var(--ink-dim);
+    font-size: 13px;
+}
+.gauges dd {
+    margin: 0;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 15px;
+    text-align: right;
+}
+
+/* ------- Controls ------------------------------------------------------- */
+
+.slider {
+    margin: 14px 0;
+}
+.slider label {
+    display: block;
+    font-size: 13px;
+    color: var(--ink-dim);
+    margin-bottom: 4px;
+}
+.slider input[type=range] {
+    width: 100%;
+    accent-color: var(--accent);
+}
+.slider output {
+    display: inline-block;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    color: var(--ink);
+    margin-top: 2px;
+}
+
+/* ------- Log ------------------------------------------------------------ */
+
+#log {
+    background: #010409;
+    border: 1px solid var(--panel-edge);
+    border-radius: 6px;
+    padding: 12px;
+    margin: 0;
+    height: 260px;
+    overflow-y: auto;
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 11px;
+    color: var(--good);
+    white-space: pre;
+}
+
+/* ------- Footer --------------------------------------------------------- */
+
+footer {
+    padding: 16px 32px 32px;
+    color: var(--ink-dim);
+    font-size: 12px;
+    border-top: 1px solid var(--panel-edge);
+}
+footer code {
+    background: #161b22;
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+@media (max-width: 880px) {
+    main {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "device"
+            "controls"
+            "log";
+    }
+}

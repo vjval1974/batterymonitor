@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Battery Monitor — Simulator</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header>
+    <h1>Battery Monitor — Simulator</h1>
+    <p class="sub">
+        Browser port of the Arduino firmware logic. The virtual LCD, gauges,
+        and CSV log are produced by the same calibration constants and screen
+        layouts as the real device.
+    </p>
+</header>
+
+<main>
+
+<section class="device">
+
+    <div class="shield">
+        <div id="lcd">
+            <pre id="lcd-top">                </pre>
+            <pre id="lcd-bot">                </pre>
+        </div>
+        <p class="screen-name"><span id="screen-name">1/7 · Summary</span></p>
+
+        <div class="buttons">
+            <div></div>
+            <button data-button="up">▲</button>
+            <div></div>
+            <button data-button="left">◀</button>
+            <button data-button="select">●</button>
+            <button data-button="right">▶</button>
+            <div></div>
+            <button data-button="down">▼</button>
+            <div></div>
+        </div>
+        <p class="hint">
+            Arrow keys / Enter also work. ◀ / ▶ change screen, ● rotates the log file.
+        </p>
+    </div>
+
+    <div class="gauges">
+        <h2>Live readout</h2>
+        <dl>
+            <dt>Battery</dt><dd id="gauge-v">—</dd>
+            <dt>SOC</dt><dd id="gauge-soc">—</dd>
+            <dt>Net current</dt><dd id="gauge-net">—</dd>
+            <dt>Load power</dt><dd id="gauge-power">—</dd>
+            <dt>Energy drawn</dt><dd id="gauge-energy">—</dd>
+            <dt>Solar power</dt><dd id="gauge-solar">—</dd>
+        </dl>
+    </div>
+
+</section>
+
+<section class="controls">
+    <h2>Drive the system</h2>
+    <p class="sub">
+        Each slider stands in for one analog channel on the Mega. The
+        firmware sees the resulting ADC counts and runs through the same
+        math as on hardware. Crank time acceleration to watch SOC drift
+        over hours in seconds.
+    </p>
+
+    <div class="slider">
+        <label for="slider-solar">Solar current</label>
+        <input id="slider-solar" type="range" min="0" max="20" step="0.1" value="6" />
+        <output id="val-solar">6.0 A</output>
+    </div>
+
+    <div class="slider">
+        <label for="slider-ac">AC charger current</label>
+        <input id="slider-ac" type="range" min="0" max="20" step="0.1" value="0" />
+        <output id="val-ac">0.0 A</output>
+    </div>
+
+    <div class="slider">
+        <label for="slider-car">Car alternator current</label>
+        <input id="slider-car" type="range" min="0" max="20" step="0.1" value="0" />
+        <output id="val-car">0.0 A</output>
+    </div>
+
+    <div class="slider">
+        <label for="slider-draw">Load current</label>
+        <input id="slider-draw" type="range" min="0" max="25" step="0.1" value="4" />
+        <output id="val-draw">4.0 A</output>
+    </div>
+
+    <div class="slider">
+        <label for="slider-accel">Time acceleration</label>
+        <input id="slider-accel" type="range" min="1" max="600" step="1" value="60" />
+        <output id="val-accel">60×</output>
+    </div>
+</section>
+
+<section class="logwrap">
+    <h2>CSV log stream</h2>
+    <p class="sub">
+        Identical format to what the firmware writes to the SD card.
+        Press the ● button (or Enter) to force-rotate to a new file.
+    </p>
+    <pre id="log"></pre>
+</section>
+
+</main>
+
+<footer>
+    <p>
+        Source: <code>sim/firmware.js</code> ports <code>include/CurrentMath.h</code>,
+        <code>include/SocLookup.h</code>, <code>include/StateOfCharge.h</code>, and the
+        screen layouts from <code>src/Display.cpp</code>. Keep them in lockstep when
+        editing calibration.
+    </p>
+</footer>
+
+<script type="module" src="sim.js"></script>
+</body>
+</html>

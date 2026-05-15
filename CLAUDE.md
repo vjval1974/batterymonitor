@@ -2,46 +2,127 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+## Project overview
 
-Battery monitor firmware for an Arduino Mega 2560. The device measures battery voltage and the current flowing into/out of a 12V battery bank from three charge sources (solar, AC charger, car alternator) and a draw line, derives power/energy, displays values on a 16x2 RGB LCD shield, and logs to an SD card with timestamps from a DS1307 RTC.
+Battery monitor firmware for an Arduino Mega 2560 + accompanying browser
+simulator. The device watches a 12 V off-grid battery bank fed by three
+charge sources (solar, AC charger, car alternator) and one load line,
+estimates state-of-charge by coulomb counting, drives a 16x2 RGB LCD with a
+7-screen menu, and logs CSV to an SD card. A `sim/` directory contains a
+1:1 JavaScript port of the firmware's math and screen layouts so the device
+can be driven from a browser without hardware.
 
-## Build / Flash
+## Common commands
 
-Uses PlatformIO (no Make/CMake). The single environment `[env:mega]` is defined in `platformio.ini`.
+| Goal                              | Command                                               |
+|-----------------------------------|-------------------------------------------------------|
+| Build firmware (Mega)             | `pio run`                                             |
+| Flash firmware                    | `pio run -t upload`                                   |
+| Serial monitor                    | `pio device monitor` (9600 baud)                      |
+| Native unit tests (Unity)         | `pio test -e native`                                  |
+| Host quickcheck (no pio needed)   | `g++ -std=gnu++17 -O2 -Wall -Iinclude test/host_quickcheck.cpp -o /tmp/qc && /tmp/qc` |
+| Simulator JS cross-check          | `node sim/test_firmware.mjs`                          |
+| Run the simulator                 | `python3 sim/server.py` then open http://localhost:8765 |
+| Static analysis                   | `pio check` (cppcheck)                                |
 
-- Build: `pio run`
-- Upload to board: `pio run -t upload`
-- Serial monitor: `pio device monitor -b 9600`
-- Clean: `pio run -t clean`
-
-`platformio.ini` references a hard-coded host library path (`lib_extra_dirs = /home/brad/Arduino/libraries`). On any other machine that line must be edited or the required libraries (`Thread`/`ThreadController`, `RTClib`, `SD`, `Adafruit_RGBLCDShield`, `Adafruit_MCP23017`) installed via `pio pkg install` instead. There are no tests or lint config.
+CI (`.github/workflows/ci.yml`) runs all four: AVR build, native tests, host
+quickcheck, cppcheck lint.
 
 ## Architecture
 
-Single translation unit: `src/BatteryMonitor.ino`. Despite the `.ino` extension, structure it as standard Arduino + PlatformIO.
+### Pure-math layer (host-testable, no Arduino dep)
 
-Runtime is cooperative, not interrupt-driven for the main work:
+These headers compile under both AVR and host g++. The same headers are
+used by the simulator's JS port — keep the calibration constants and SOC
+table in lockstep across `include/Config.h`, `include/SocLookup.h`, and
+`sim/firmware.js`.
 
-- `setup()` initializes Serial (9600), the wake interrupt on pin 2, the LCD, SD card, and RTC, then opens a log file named `MMDDHHMM.txt` (or `NoRTC.txt` if the RTC isn't running). If `SD.open` fails it spins forever — this is intentional.
-- `loop()` only calls `threadController.run()`. Two `Thread` objects are registered:
-  - `measurementThread` → `MeasurementRunner` every 5000 ms: takes measurements then logs them.
-  - `lcdDisplayThread` → `displayHandler` every 53 ms: reads buttons and refreshes the LCD.
-- `measurementsRunning` is a flag the display thread checks to avoid drawing mid-sample. Treat the two threads as mutually exclusive on shared state via this flag, not as preemptive.
+- `include/Config.h` — single source of truth for pins, calibration
+  constants, intervals, feature flags. Organised into `bm::config::{pin,
+  cal, battery, timing, logger, ui}` namespaces.
+- `include/CurrentMath.h` — `adcToCurrent`, `adcToBatteryVolts`, with the
+  0.18 A noise-floor clamp.
+- `include/SocLookup.h` — voltage → SOC% table (flooded lead-acid by
+  default; replace for other chemistries).
+- `include/StateOfCharge.h` — coulomb-counter with `maybeReanchor()` that
+  snaps to 100 % after 5 min at float voltage + quiescent current.
+- `include/EnergyAccumulator.h` — Wh integrator.
+- `include/RingBuffer.h` — fixed-capacity float buffer with min/max/mean.
+- `include/Measurements.h` — `Sample` struct + `Field` enum + label table.
+  `kFieldCount` and the label array in `src/Measurements.cpp` must stay
+  in lockstep; the native test `test_field_count_stays_in_lockstep`
+  enforces it.
 
-Measurements layout: `measurements[]` is indexed by the `Calculation` enum (`BattVoltage`, `DrawCurrent`, `SolarCurrent`, `AcCurrent`, `CarCurrent`, `TotalChargingCurrent`, `CurrentBalance`, `Power`, `Energy`, `SolarPower`). Charge currents are negated so that `TotalChargingCurrent + DrawCurrent` yields a signed `CurrentBalance`. If you add a measurement, update `NUM_MEASUREMENTS`, the enum, and the parallel `measurementText[]` array together — they're indexed in lockstep.
+### Hardware-coupled modules (AVR-only)
 
-Sensing details worth knowing before touching the math:
-- ACS712-style current sensors: `mvPerAmp = 0.066`, ADC mapped to ±1650 mV around midpoint. Per-channel offsets (`SolarChargeCurrentOffset`, `DrawCurrentOffset`, `CarChargeCurrentOffset`, `AcChargeCurrentOffset`) are calibration constants. `CalculateCurrent` zeroes out |I| ≤ 0.18 A as noise.
-- Battery voltage is read through a divider gated by a relay on `BatteryVoltageSenseRelayPin` (pin 8) to avoid continuous current through the sense resistor. The sequence in `TakeMeasurements` — relay HIGH, delay 200 ms, read, delay 100 ms, relay LOW — must stay intact; full-scale at 5 V corresponds to `vMaxAt5v = 15.88` V.
-- `Energy` uses a hard-coded `MeasurementPeriodInSeconds = 5.3` (thread interval + sampling delays). If you change `measurementThread->setInterval(...)` or the relay delays, update this constant or energy totals will drift.
+- `include/Sampler.h` / `src/Sampler.cpp` — drives the voltage relay,
+  reads the five ADC channels, applies calibration, updates SOC + energy
+  trackers. Relay timing is in `Config::cal::kRelaySettleMs` /
+  `kRelayReleaseMs`; if you change these, also update
+  `Config::timing::kMeasurementWindowSec` (it's the energy integration
+  step).
+- `include/Logger.h` / `src/Logger.cpp` — SD-card CSV logger. Filename
+  `YYMMDDHH.CSV`; rotates when the active file exceeds
+  `Config::logger::kMaxLogBytes` (512 KiB). Header row is written on
+  first open. Failures are non-fatal — the firmware degrades gracefully
+  and the LCD's Logger screen surfaces the problem.
+- `include/Display.h` / `src/Display.cpp` — 7 LCD screens, debounced
+  button handling, backlight state machine. Pages cycle on ◀/▶. New
+  screens go in the `switch` in `Display::tick()` and increment
+  `kPageCount`.
+- `include/PowerManager.h` / `src/PowerManager.cpp` — drops the MCU into
+  `SLEEP_MODE_PWR_DOWN` after `Config::timing::kIdleSleepTimeoutMs` of no
+  button activity. Opens the voltage-sense relay before sleep so the
+  divider doesn't drain during downtime.
 
-Sleep path (`sleepNow`/`wakeUpNow`, INT0 on pin 2) is wired up but not invoked from `loop()` — `SleepModeLoop` exists but is unused. The wake ISR is intentionally empty.
+### Entry point
 
-Logging: `Log()` writes one line per call to `dataFile` and `flush()`es every time. The TODO about rotating files when size exceeds ~1 MB is unimplemented.
+`src/main.cpp` wires two cooperative `Thread`s into a `ThreadController`:
+sampling at 5 s, display at 53 ms. The `sampling` flag is the only
+synchronisation between them; the display thread skips a frame mid-sample
+so the ADC isn't disturbed. `loop()` is just
+`scheduler.run(); power.tick(millis());`.
 
-## Repository State
+The whole file is wrapped in `#ifdef TARGET_AVR` so the same source
+participates cleanly in native-test builds (which exclude `src/main.cpp`
+via `build_src_filter` in the `[env:native]` section of `platformio.ini`).
 
-- Default branch: `master` — contains the only substantive commit, `e0523d4 Initial checkin of project in platformIO`.
-- Active working branch: `claude/init-repo-review-cOZX8` (this is where Claude Code on the web develops; push here, not to `master`).
-- No README, no tests, no CI. The repo is a single-file Arduino sketch wrapped in PlatformIO scaffolding.
+### Web simulator (`sim/`)
+
+- `sim/firmware.js` — ES-module port of the pure-math layer. Same
+  calibration constants and SOC curve as `include/Config.h` /
+  `include/SocLookup.h`. Same screen layouts as `src/Display.cpp`.
+- `sim/sim.js` — battery + sources model with sliders, button handlers,
+  gauges, CSV log stream. Drives `takeSample()` on the firmware's
+  sampling cadence (scaled by a time-acceleration slider).
+- `sim/index.html` / `sim/style.css` — single-page UI.
+- `sim/server.py` — minimal static-file server for local dev.
+- `sim/test_firmware.mjs` — Node script that asserts the JS port matches
+  the C++ math. 26 cross-checks. Run with `node sim/test_firmware.mjs`.
+
+If you change a calibration constant in `include/Config.h`, mirror it in
+`sim/firmware.js`. If you change a screen format in `src/Display.cpp`,
+mirror it in `SCREENS[]` in `sim/firmware.js`. `test_firmware.mjs` will
+catch screen-width regressions but not value mismatches — those are
+covered by the matching `pio test -e native` cases.
+
+## Repository state
+
+- Default branch: `master` — contains the original single-file sketch.
+- Active development branch: `claude/init-repo-review-cOZX8` — modular
+  refactor + simulator + tests + CI. Push all work here, not to `master`.
+
+## Things worth knowing before editing
+
+- **Charge currents are stored as negative-out / positive-in** at the
+  raw sensor level, then sign-flipped in `Sampler::take` so callers see
+  charging as a positive contribution. `netA = drawA - chargeA` is the
+  net battery drain (positive = discharging).
+- **Energy integration constant** `Config::timing::kMeasurementWindowSec`
+  bakes in the 5-second sample period plus the 200 ms + 100 ms relay
+  delays. Change those and Wh totals will drift.
+- **AVR memory** is tight (8 KB SRAM). All log/render code uses fixed
+  `char` buffers and `snprintf` — no `String` objects, no heap.
+- **Filenames** on the SD card must be 8.3-compliant; the formatter in
+  `Logger::formatName` produces `YYMMDDHH.CSV` (or `NORTC.CSV` when the
+  RTC is missing).
