@@ -48,9 +48,14 @@ def main() -> int:
         '<link rel="stylesheet" href="style.css" />',
         f"<style>\n{css}\n</style>",
     )
+    # IMPORTANT: emit a plain <script>, NOT <script type="module">. Module
+    # scripts from file:// are blocked by the browser's CORS rules (you'd get
+    # "Failed to load module script: Cross origin requests are only supported
+    # for HTTP."). The bundle has no `import` statements left, so module
+    # semantics aren't needed — plain script runs fine off file://.
     out = out.replace(
         '<script type="module" src="sim.js"></script>',
-        f'<script type="module">\n{bundled_js}\n</script>',
+        f'<script>\n{bundled_js}\n</script>',
     )
 
     # Update title to mark it as the standalone build.
