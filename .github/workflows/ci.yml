@@ -70,6 +70,27 @@ jobs:
           g++ -std=gnu++17 -O2 -Wall -Wextra -Iinclude test/host_quickcheck.cpp -o /tmp/quickcheck
           /tmp/quickcheck
 
+  simulator-port:
+    name: Simulator JS port + standalone bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Cross-check simulator math against firmware
+        run: node sim/test_firmware.mjs
+
+      - name: Rebuild the standalone bundle and verify it parses
+        run: |
+          python3 sim/build_standalone.py
+          node --check sim/firmware.js
+          node --check sim/sim.js
+          # Smoke-check the bundle was emitted with non-trivial size.
+          test "$(wc -c < sim/standalone.html)" -gt 20000
+
   lint:
     name: Static analysis (cppcheck)
     runs-on: ubuntu-latest

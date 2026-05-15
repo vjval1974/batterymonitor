@@ -56,9 +56,26 @@ Both exercise the same pure-math layer (`CurrentMath`, `SocLookup`,
 
 ### Try the web simulator
 
+Three ways to run it, in order of "least typing":
+
+**A. Open the bundled standalone file directly.** No server, no install:
+
+```bash
+python3 sim/build_standalone.py    # produces sim/standalone.html
+xdg-open sim/standalone.html       # or just double-click it
+```
+
+**B. Run the dev server** (useful when iterating on `sim/firmware.js`):
+
 ```bash
 cd sim && python3 server.py
 # then open http://localhost:8765
+```
+
+**C. Cross-check the JS port against the C++ math** (CI also runs this):
+
+```bash
+node sim/test_firmware.mjs
 ```
 
 You'll see a virtual LCD, the five buttons, sliders for sun / charger /
